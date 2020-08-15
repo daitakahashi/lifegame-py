@@ -1,4 +1,5 @@
 
+import itertools
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -49,7 +50,50 @@ class GameBoard:
         return self.board
 
 
-def test_lifegame():
+def test_rules():
+    def generate_problems(center='live', n=0):
+        ixs = [0, 1, 2, 3, 5, 6, 7, 8]
+        center_status = {'live': 1, 'dead': 0}
+        problems = []
+        for combn in itertools.combinations(ixs, n):
+            mat = np.zeros((3, 3), dtype=np.uint8)
+            mat.ravel()[np.array(combn, dtype=int)] = 1
+            mat[1, 1] = center_status[center]
+            problems.append(GameBoard(mat, 0))
+        return problems
+    def is_live(mat):
+        return mat[1, 1] == 1
+    def is_dead(mat):
+        return mat[1, 1] == 0
+    def check(center, surrounding_living_cells, test_next):
+        return all([
+            test_next(prob.tick())
+            for prob in generate_problems(center, surrounding_living_cells)
+        ])
+
+    # surrounded by 0 living cells -> die
+    assert check('dead', surrounding_living_cells=0, test_next=is_dead)
+    assert check('live', surrounding_living_cells=0, test_next=is_dead)
+
+    # surrounded by a living cell -> die
+    assert check('dead', surrounding_living_cells=1, test_next=is_dead)
+    assert check('live', surrounding_living_cells=1, test_next=is_dead)
+
+    # surrounded by 2 living cells -> survive but no birth
+    assert check('dead', surrounding_living_cells=2, test_next=is_dead)
+    assert check('live', surrounding_living_cells=2, test_next=is_live)
+
+    # surrounded by 3 living cells -> survive and birth
+    assert check('dead', surrounding_living_cells=3, test_next=is_live)
+    assert check('live', surrounding_living_cells=3, test_next=is_live)
+
+    # surrounded by > 4 living cells -> die
+    for n in range(4, 9):
+        assert check('dead', surrounding_living_cells=n, test_next=is_dead)
+        assert check('live', surrounding_living_cells=n, test_next=is_dead)
+
+
+def test_glider():
     glider_board = np.array([
         [1, 0, 0, 0, 0, 0],
         [0, 1, 1, 0, 0, 0],
@@ -58,11 +102,12 @@ def test_lifegame():
         [0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0]
     ], dtype=np.uint8)
-    # return to the original state after 24 ticks (periodic boundary)
+    # it returns to the original state after 24 ticks (periodic boundary)
     gb = GameBoard(glider_board.copy(), 0)
     for _ in range(24):
         gb.tick()
     assert np.all(gb.board == glider_board)
+
 
 def gui_runner(initial_board, delay=30, noise_interval=0):
     win_name = 'board'
@@ -76,6 +121,7 @@ def gui_runner(initial_board, delay=30, noise_interval=0):
     while cv2.waitKey(delay) < 0:
         cv2.convertScaleAbs(gb.tick(), dst=img_buffer, alpha=255)
         cv2.imshow(win_name, img_buffer)
+
 
 def preprocess(image_path, height, width):
     if image_path:
@@ -122,6 +168,7 @@ def main():
         delay=args.delay,
         noise_interval=args.noise_interval
     )
+
 
 if __name__ == '__main__':
     main()
