@@ -35,18 +35,17 @@ class GameBoard:
         self.n_pixels = int(np.multiply(*self.board.shape))
         noise_proportion = 0.001
         self.noise_indices = np.zeros(
-            int(self.n_pixels*noise_proportion), dtype=np.int32
+            int(np.ceil(self.n_pixels*noise_proportion)), dtype=np.int32
         )
         self.noise_interval = noise_interval
 
     def tick(self):
+        self.i += 1
         evolve(self.board, self.buff_bordered)
         if self.i >= self.noise_interval > 0:
             self.i = 0
             cv2.randu(self.noise_indices, 0, self.n_pixels)
             self.board_vector[self.noise_indices] = 1
-        else:
-            self.i += 1
         return self.board
 
 
@@ -107,6 +106,19 @@ def test_glider():
     for _ in range(24):
         gb.tick()
     assert np.all(gb.board == glider_board)
+
+
+def test_noise():
+    problem = np.zeros((5, 5), dtype=np.uint8)
+    intervals = [1, 10, 100]
+    for interval in intervals:
+        gb = GameBoard(problem.copy(), interval)
+        for _ in range(interval - 1):
+            assert np.all(gb.tick() == problem)
+        assert np.any(gb.tick() != problem)
+    gb = GameBoard(problem.copy(), 0)
+    for _ in range(1000):
+        assert np.all(gb.tick() == problem)
 
 
 def gui_runner(initial_board, delay=30, noise_interval=0):
