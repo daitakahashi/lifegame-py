@@ -1,5 +1,6 @@
 
 import itertools
+import time
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -135,6 +136,20 @@ def gui_runner(initial_board, delay=30, noise_interval=0):
         cv2.imshow(win_name, img_buffer)
 
 
+def benchmark_runner(n_ticks, initial_board, delay=30, noise_interval=0):
+    t0 = time.time()
+    gb = GameBoard(initial_board, noise_interval)
+    t1 = time.time()
+    for _ in range(n_ticks):
+        gb.tick()
+    t2 = time.time()
+    print('board initialization: {}s, time evolution ({} ticks): {}s'.format(
+        t1 - t0, n_ticks, t2 - t1
+    ))
+    return
+    
+
+
 def preprocess(image_path, height, width):
     if image_path:
         input_image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
@@ -172,14 +187,26 @@ def main():
         default=0,
         help='interval between noise additions (disabled when < 1)'
     )
+    parser.add_argument(
+        '--benchmark', type=int,
+        help='run non-gui benchmark with specified ticks'
+    )
 
     args = parser.parse_args()
 
-    gui_runner(
-        preprocess(args.image, args.height, args.width),
-        delay=args.delay,
-        noise_interval=args.noise_interval
-    )
+    if args.benchmark is None:
+        gui_runner(
+            preprocess(args.image, args.height, args.width),
+            delay=args.delay,
+            noise_interval=args.noise_interval
+        )
+    else:
+        benchmark_runner(
+            args.benchmark,
+            preprocess(args.image, args.height, args.width),
+            delay=args.delay,
+            noise_interval=args.noise_interval
+        )
 
 
 if __name__ == '__main__':
