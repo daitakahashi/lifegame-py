@@ -18,11 +18,14 @@ class GameBoard:
     def __init__(self, initial_board, noise_interval):
         self.board = cv2.UMat(initial_board.astype(np.uint8))
         self.board_size = initial_board.shape[:2]
-        self.buff_bordered = cv2.copyMakeBorder(
+        self.buff_bordered1 = cv2.copyMakeBorder(
             self.board, 1, 1, 1, 1, borderType=cv2.BORDER_DEFAULT
         )
-        self.buff_center = cv2.UMat(
-            self.buff_bordered, (1, self.board_size[0] + 1), (1, self.board_size[1] + 1)
+        self.buff_bordered2 = cv2.copyMakeBorder(
+            self.board, 1, 1, 1, 1, borderType=cv2.BORDER_DEFAULT
+        )
+        self.buff2_in_roi = cv2.UMat(
+            self.buff_bordered2, (1, self.board_size[0] + 1), (1, self.board_size[1] + 1)
         )
         self.i = 0
         self.n_pixels = int(np.multiply(*self.board_size))
@@ -36,14 +39,15 @@ class GameBoard:
     def tick(self):
         self.i += 1
         board = self.board
-        buff = self.buff_bordered
-        buff_center = self.buff_center
+        buff1 = self.buff_bordered1
+        buff2 = self.buff_bordered2
+        buff2_in_roi = self.buff2_in_roi
         cv2.copyMakeBorder(
-            board, 1, 1, 1, 1, dst=buff, borderType=cv2.BORDER_WRAP
+            board, 1, 1, 1, 1, dst=buff1, borderType=cv2.BORDER_WRAP
         )
-        cv2.filter2D(buff, -1, morph_kernel, dst=buff)
-        cv2.threshold(buff, 3, 0, cv2.THRESH_TOZERO_INV, dst=buff)
-        cv2.scaleAdd(buff_center, 1, board, dst=board)
+        cv2.filter2D(buff1, -1, morph_kernel, dst=buff2)
+        cv2.threshold(buff2, 3, 0, cv2.THRESH_TOZERO_INV, dst=buff2)
+        cv2.scaleAdd(buff2_in_roi, 1, board, dst=board)
         cv2.threshold(board, 2, 1, cv2.THRESH_BINARY, dst=board)
         if self.i >= self.noise_interval > 0:
             self.i = 0
@@ -121,6 +125,20 @@ def test_glider():
     for _ in range(24):
         gb.tick()
     assert np.all(gb.board_np == glider_board)
+
+
+def test_constant():
+    n_blocks = 2000
+    n_iter = 10
+    blocks = np.array([
+        [0, 0, 0]*n_blocks,
+        [0, 1, 1]*n_blocks,
+        [0, 1, 1]*n_blocks
+    ]*n_blocks, dtype=np.uint8)
+    gb = GameBoard(blocks.copy(), 0)
+    for _ in range(n_iter):
+        gb.tick()
+    assert np.all(gb.board_np == blocks)
 
 
 def test_noise():
