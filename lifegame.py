@@ -15,6 +15,9 @@ morph_kernel = cv2.UMat(np.array([
 
 
 class GameBoard:
+    # note: this UMat version is slower than previous Mat version on
+    # my old macbook air (without discrete GPU), but by far faster on
+    # a linux machine with Nvidia GPU.
     def __init__(self, initial_board, noise_interval):
         self.board = cv2.UMat(initial_board.astype(np.uint8))
         self.board_size = initial_board.shape[:2]
