@@ -7,47 +7,61 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-morph_kernel = np.array([
+morph_kernel = cv2.UMat(np.array([
     [1, 1, 1],
     [1, 0, 1],
     [1, 1, 1]
-], np.uint8)
-
-
-def evolve(board, buff):
-    cv2.copyMakeBorder(
-        board, 1, 1, 1, 1, dst=buff, borderType=cv2.BORDER_WRAP
-    )
-    cv2.filter2D(buff, -1, morph_kernel, dst=buff)
-    cv2.threshold(buff, 3, 0, cv2.THRESH_TOZERO_INV, dst=buff)
-    cv2.scaleAdd(buff[1:-1, 1:-1], 1, board, dst=board)
-    cv2.threshold(board, 2, 1, cv2.THRESH_BINARY, dst=board)
-    return board
+], np.uint8))
 
 
 class GameBoard:
     def __init__(self, initial_board, noise_interval):
-        self.board = initial_board.astype(np.uint8)
-        self.board_vector = self.board.ravel()
+        self.board = cv2.UMat(initial_board.astype(np.uint8))
+        self.board_size = initial_board.shape[:2]
         self.buff_bordered = cv2.copyMakeBorder(
             self.board, 1, 1, 1, 1, borderType=cv2.BORDER_DEFAULT
         )
+        self.buff_center = cv2.UMat(
+            self.buff_bordered, (1, self.board_size[0] + 1), (1, self.board_size[1] + 1)
+        )
         self.i = 0
-        self.n_pixels = int(np.multiply(*self.board.shape))
+        self.n_pixels = int(np.multiply(*self.board_size))
         noise_proportion = 0.001
         self.noise_indices = np.zeros(
             int(np.ceil(self.n_pixels*noise_proportion)), dtype=np.int32
         )
+        self.noise = np.zeros(self.board_size, dtype=np.uint8)
         self.noise_interval = noise_interval
 
     def tick(self):
         self.i += 1
-        evolve(self.board, self.buff_bordered)
+        board = self.board
+        buff = self.buff_bordered
+        buff_center = self.buff_center
+        cv2.copyMakeBorder(
+            board, 1, 1, 1, 1, dst=buff, borderType=cv2.BORDER_WRAP
+        )
+        cv2.filter2D(buff, -1, morph_kernel, dst=buff)
+        cv2.threshold(buff, 3, 0, cv2.THRESH_TOZERO_INV, dst=buff)
+        cv2.scaleAdd(buff_center, 1, board, dst=board)
+        cv2.threshold(board, 2, 1, cv2.THRESH_BINARY, dst=board)
         if self.i >= self.noise_interval > 0:
             self.i = 0
             cv2.randu(self.noise_indices, 0, self.n_pixels)
-            self.board_vector[self.noise_indices] = 1
-        return self.board
+            self.noise[:] = 0
+            self.noise.ravel()[self.noise_indices] = 1
+            cv2.bitwise_or(
+                cv2.UMat(self.noise), board, dst=board
+            )
+        return board
+
+    def tick_np(self):
+        self.tick()
+        return self.board_np
+
+    @property
+    def board_np(self):
+        return cv2.UMat.get(self.board)
 
 
 def test_rules():
@@ -67,7 +81,7 @@ def test_rules():
         return mat[1, 1] == 0
     def check(center, surrounding_living_cells, test_next):
         return all([
-            test_next(prob.tick())
+            test_next(prob.tick_np())
             for prob in generate_problems(center, surrounding_living_cells)
         ])
 
@@ -106,7 +120,7 @@ def test_glider():
     gb = GameBoard(glider_board.copy(), 0)
     for _ in range(24):
         gb.tick()
-    assert np.all(gb.board == glider_board)
+    assert np.all(gb.board_np == glider_board)
 
 
 def test_noise():
@@ -115,17 +129,17 @@ def test_noise():
     for interval in intervals:
         gb = GameBoard(problem.copy(), interval)
         for _ in range(interval - 1):
-            assert np.all(gb.tick() == problem)
-        assert np.any(gb.tick() != problem)
+            assert np.all(gb.tick_np() == problem)
+        assert np.any(gb.tick_np() != problem)
     gb = GameBoard(problem.copy(), 0)
     for _ in range(1000):
-        assert np.all(gb.tick() == problem)
+        assert np.all(gb.tick_np() == problem)
 
 
 def gui_runner(initial_board, delay=30, noise_interval=0):
     win_name = 'board'
-    img_buffer = np.zeros_like(initial_board)
-    cv2.convertScaleAbs(initial_board, dst=img_buffer, alpha=255)
+    img_buffer = cv2.UMat(np.zeros_like(initial_board))
+    cv2.convertScaleAbs(cv2.UMat(initial_board), dst=img_buffer, alpha=255)
     cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
     cv2.imshow(win_name, img_buffer)
     cv2.waitKey()
